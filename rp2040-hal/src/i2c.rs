@@ -245,6 +245,17 @@ macro_rules! hal {
                 fn tx_fifo_full(&self) -> bool {
                     self.tx_fifo_free() == 0
                 }
+
+                fn read_and_clear_abort_reason(&mut self) -> u32 {
+                    let abort_reason = self.i2c.ic_tx_abrt_source.read().bits();
+                    if abort_reason != 0 {
+                        // Note clearing the abort flag also clears the reason, and
+                        // this instance of flag is clear-on-read! Note also the
+                        // IC_CLR_TX_ABRT register always reads as 0.
+                        self.i2c.ic_clr_tx_abrt.read().clr_tx_abrt();
+                    }
+                    abort_reason
+                }
             }
 
             impl<PINS> Write for I2C<$I2CX, PINS> {
@@ -287,12 +298,8 @@ macro_rules! hal {
                         // was set in i2c_init.
                         while self.i2c.ic_raw_intr_stat.read().tx_empty().is_inactive() {}
 
-                        abort_reason = self.i2c.ic_tx_abrt_source.read().bits();
+                        abort_reason = self.read_and_clear_abort_reason();
                         if abort_reason != 0 {
-                            // Note clearing the abort flag also clears the reason, and
-                            // this instance of flag is clear-on-read! Note also the
-                            // IC_CLR_TX_ABRT register always reads as 0.
-                            self.i2c.ic_clr_tx_abrt.read().clr_tx_abrt();
                             abort = true;
                         }
 
@@ -357,12 +364,8 @@ macro_rules! hal {
                         // was set in i2c_init.
                         while self.i2c.ic_raw_intr_stat.read().tx_empty().is_inactive() {}
 
-                        abort_reason = self.i2c.ic_tx_abrt_source.read().bits();
+                        abort_reason = self.read_and_clear_abort_reason();
                         if abort_reason != 0 {
-                            // Note clearing the abort flag also clears the reason, and
-                            // this instance of flag is clear-on-read! Note also the
-                            // IC_CLR_TX_ABRT register always reads as 0.
-                            self.i2c.ic_clr_tx_abrt.read().clr_tx_abrt();
                             abort = true;
                         }
 
@@ -412,8 +415,10 @@ macro_rules! hal {
                         });
 
                         while !abort && self.i2c.ic_rxflr.read().bits() == 0 {
-                            abort_reason = self.i2c.ic_tx_abrt_source.read().bits();
-                            abort = self.i2c.ic_clr_tx_abrt.read().bits() > 0;
+                            abort_reason = self.read_and_clear_abort_reason();
+                            if abort_reason != 0 {
+                                abort = true;
+                            }
                         }
 
                         if abort {
@@ -478,8 +483,10 @@ macro_rules! hal {
                         });
 
                         while !abort && self.i2c.ic_rxflr.read().bits() == 0 {
-                            abort_reason = self.i2c.ic_tx_abrt_source.read().bits();
-                            abort = self.i2c.ic_clr_tx_abrt.read().bits() > 0;
+                            abort_reason = self.read_and_clear_abort_reason();
+                            if abort_reason != 0 {
+                                abort = true;
+                            }
                         }
 
                         if abort {
