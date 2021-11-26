@@ -225,6 +225,14 @@ pub trait Spinlock: typelevel::Sealed + Sized {
     fn claim_async() -> nb::Result<Self, Infallible> {
         Self::try_claim().ok_or(nb::Error::WouldBlock)
     }
+
+    /// Create a spinlock in claimed state.
+    ///
+    /// # Safety
+    ///
+    /// Only call this if you claimed the spinlock and
+    /// called core::mem::forget(spinlock) on it.
+    unsafe fn create_claimed() -> Self;
 }
 macro_rules! impl_spinlock {
     ($($spinlock_name:ident => $register:ident,)*) => {
@@ -261,6 +269,10 @@ macro_rules! impl_spinlock {
                     } else {
                         None
                     }
+                }
+
+                unsafe fn create_claimed() -> $spinlock_name {
+                    Self(core::marker::PhantomData)
                 }
             }
 

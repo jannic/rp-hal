@@ -1,3 +1,4 @@
+use crate::sio::{self, Spinlock};
 use core::sync::atomic::{AtomicU8, Ordering};
 
 struct RpSpinlockCs;
@@ -41,10 +42,12 @@ unsafe impl critical_section::Impl for RpSpinlockCs {
                 // Ensure the compiler doesn't re-order accesses and violate safety here
                 core::sync::atomic::compiler_fence(Ordering::SeqCst);
                 // Read the spinlock reserved for `critical_section`
-                if (*pac::SIO::ptr()).spinlock31.read().bits() != 0 {
+                if let Some(lock) = sio::Spinlock31::try_claim() {
                     // We just acquired the lock.
                     // Store which core we are so we can tell if we're called recursively
                     LOCK_OWNER.store(core, Ordering::Relaxed);
+                    // skip dropping the lock so it's not getting released
+                    core::mem::forget(lock);
                     break;
                 }
                 // We didn't get the lock, enable interrupts if they were enabled before we started
@@ -66,8 +69,11 @@ unsafe impl critical_section::Impl for RpSpinlockCs {
             LOCK_OWNER.store(LOCK_UNOWNED, Ordering::Relaxed);
             // Ensure the compiler doesn't re-order accesses and violate safety here
             core::sync::atomic::compiler_fence(Ordering::SeqCst);
-            // Release the spinlock to allow others to enter critical_section again
-            (*pac::SIO::ptr()).spinlock31.write_with_zero(|w| w.bits(1));
+            // Safety: We claimed the lock above, in acquire()
+            let lock = sio::Spinlock31::create_claimed();
+            // Release the spinlock to allow others to enter critical_section again.
+            // Must be done before the interrupts are enabled to avoid deadlocks.
+            core::mem::drop(lock);
             // Re-enable interrupts if they were enabled when we first called acquire()
             // We only do this on the outermost `critical_section` to ensure interrupts stay disabled
             // for the whole time that we have the lock
