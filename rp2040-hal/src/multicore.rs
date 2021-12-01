@@ -85,6 +85,13 @@ pub struct Core<'p> {
     inner: Option<(&'p mut pac::PSM, &'p mut pac::PPB, &'p mut crate::sio::Sio)>,
 }
 
+/// Data type for a properly aligned stack of N 32-bit (usize) words
+#[repr(C, align(32))]
+pub struct Stack<const SIZE: usize> {
+    /// Memory to be used for the stack
+    pub mem: [usize; SIZE]
+}
+
 impl<'p> Core<'p> {
     /// Get the id of this core.
     pub fn id(&self) -> u8 {
@@ -94,11 +101,11 @@ impl<'p> Core<'p> {
         }
     }
 
-    fn inner_spawn(
+    fn inner_spawn<const SIZE: usize>(
         &mut self,
         wrapper: *mut (),
         entry: *mut (),
-        stack: &'static mut [usize],
+        stack: &'static mut Stack<SIZE>,
     ) -> Result<(), Error> {
         if let Some((psm, ppb, sio)) = self.inner.as_mut() {
             // Reset the core
@@ -109,7 +116,7 @@ impl<'p> Core<'p> {
             psm.frce_off.modify(|_, w| w.proc1().clear_bit());
 
             // Set up the stack
-            let mut stack_ptr = unsafe { stack.as_mut_ptr().add(stack.len()) };
+            let mut stack_ptr = unsafe { stack.mem.as_mut_ptr().add(SIZE) };
 
             let mut push = |v: usize| unsafe {
                 stack_ptr = stack_ptr.sub(1);
@@ -117,7 +124,7 @@ impl<'p> Core<'p> {
             };
 
             push(wrapper as usize);
-            push(stack.as_mut_ptr() as usize);
+            push(stack.mem.as_mut_ptr() as usize);
             push(entry as usize);
 
             let vector_table = ppb.vtor.read().bits();
@@ -165,7 +172,7 @@ impl<'p> Core<'p> {
 
     /// Spawn a function on this core.
     #[cfg(not(feature = "alloc"))]
-    pub fn spawn(&mut self, entry: fn() -> !, stack: &'static mut [usize]) -> Result<(), Error> {
+    pub fn spawn<const SIZE: usize>(&mut self, entry: fn() -> !, stack: &'static mut Stack<SIZE>) -> Result<(), Error> {
         #[allow(improper_ctypes_definitions)]
         extern "C" fn core1_no_alloc(entry: fn() -> !, stack_bottom: *mut usize) -> ! {
             core1_setup(stack_bottom);
