@@ -106,7 +106,9 @@ use core::marker::PhantomData;
 use crate::gpio::dynpin::DynFunction;
 #[cfg(feature = "eh1_0_alpha")]
 use eh1_0_alpha::digital as eh1;
-use hal::digital::v2::{InputPin, OutputPin, StatefulOutputPin, ToggleableOutputPin, IoPin, PinState};
+use hal::digital::v2::{
+    InputPin, IoPin, OutputPin, PinState, StatefulOutputPin, ToggleableOutputPin,
+};
 
 use core::mem::transmute;
 
@@ -536,7 +538,10 @@ where
 
     /// Configure the pin to operate as a push-pull output with an initial state
     #[inline]
-    pub fn into_push_pull_output_in_state(mut self, initial_state: PinState) -> Pin<I, PushPullOutput> {
+    pub fn into_push_pull_output_in_state(
+        mut self,
+        initial_state: PinState,
+    ) -> Pin<I, PushPullOutput> {
         match initial_state {
             PinState::High => self._set_high(),
             PinState::Low => self._set_low(),
@@ -868,7 +873,6 @@ where
     #[inline]
     fn into_output_pin(self, state: PinState) -> Result<Pin<I, Output<PushPull>>, Self::Error> {
         Ok(self.into_push_pull_output_in_state(state))
-
     }
 }
 
@@ -981,14 +985,16 @@ where
         Ok(self.into_floating_input())
     }
     #[inline]
-    fn into_output_pin(self, state: eh1::PinState) -> Result<Pin<I, Output<PushPull>>, Self::Error> {
+    fn into_output_pin(
+        self,
+        state: eh1::PinState,
+    ) -> Result<Pin<I, Output<PushPull>>, Self::Error> {
         // translate to eh0 PinState
         let state = match state {
             eh1::PinState::High => PinState::High,
             eh1::PinState::Low => PinState::Low,
         };
         Ok(self.into_push_pull_output_in_state(state))
-
     }
 }
 
