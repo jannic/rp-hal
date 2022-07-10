@@ -979,7 +979,12 @@ where
         Ok(self.into_floating_input())
     }
     #[inline]
-    fn into_output_pin(self, state: PinState) -> Result<Pin<I, Output<PushPull>>, Self::Error> {
+    fn into_output_pin(self, state: eh1::PinState) -> Result<Pin<I, Output<PushPull>>, Self::Error> {
+        // translate to eh0 PinState
+        let state = match state {
+            eh1::PinState::High => PinState::High,
+            eh1::PinState::Low => PinState::Low,
+        };
         Ok(self.into_push_pull_output_in_state(state))
 
     }
