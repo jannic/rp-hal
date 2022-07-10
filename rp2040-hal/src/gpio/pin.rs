@@ -974,6 +974,8 @@ where
     I: PinId,
     M: PinMode + ValidPinMode<I>,
 {
+    type Error = Infallible;
+
     #[inline]
     fn into_input_pin(self) -> Result<Pin<I, Input<Floating>>, Self::Error> {
         Ok(self.into_floating_input())
