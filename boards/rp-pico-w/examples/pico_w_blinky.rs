@@ -70,6 +70,9 @@ fn main() -> ! {
     // TODO fix this, the on-board LED is not directly accessible on a
     // GPIO pin, but only via the WLAN chip.
     // let mut led_pin = pins.led.into_push_pull_output();
+    
+
+    let executor = embassy::executor::Executor::new();
 
     // Blink the LED at 1 Hz
     loop {
