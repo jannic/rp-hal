@@ -7,7 +7,7 @@ extern crate cortex_m_rt;
 #[cfg(feature = "rt")]
 pub use hal::entry;
 
-mod embassy_time_driver;
+// mod embassy_time_driver;
 
 /// The linker will place this boot block at the start of our program image. We
 /// need this to help the ROM bootloader get our code up and running.

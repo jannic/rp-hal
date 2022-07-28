@@ -31,6 +31,8 @@ use rp_pico_w::hal::pac;
 // higher-level drivers.
 use rp_pico_w::hal;
 
+use cyw43;
+
 /// Entry point to our bare-metal application.
 ///
 /// The `#[entry]` macro ensures the Cortex-M start-up code calls this function
