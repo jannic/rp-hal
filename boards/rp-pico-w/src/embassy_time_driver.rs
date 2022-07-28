@@ -2,6 +2,7 @@
 
 use core::cell::Cell;
 use core::cell::RefCell;
+use core::ops::DerefMut;
 
 use atomic_polyfill::{AtomicU8, Ordering};
 use critical_section::CriticalSection;
@@ -44,8 +45,7 @@ embassy::time_driver_impl!(static DRIVER: TimerDriver = TimerDriver{
 impl Driver for TimerDriver {
     fn now(&self) -> u64 {
         critical_section::with(|cs| {
-            let timer = self.timer.borrow(cs).borrow().unwrap();
-            timer.get_counter()
+            self.timer.borrow(cs).borrow().as_ref().unwrap().get_counter()
         })
     }
 
@@ -77,16 +77,16 @@ impl Driver for TimerDriver {
         critical_section::with(|cs| {
             let alarms = self.alarms.borrow(cs);
             let alarm = &alarms[n];
-            let timer = self.timer.borrow(cs).borrow().unwrap();
+            let timer = self.timer.borrow(cs).borrow_mut().as_mut();
             alarm.timestamp.set(timestamp);
 
-            let min_timestamp = alarms.iter().min().unwrap();
+            let min_timestamp = alarms.iter().map(|a| a.timestamp.get()).min().unwrap();
 
             // Arm it.
             // Note that we're not checking the high bits at all. This means the irq may fire early
             // if the alarm is more than 72 minutes (2^32 us) in the future. This is OK, since on irq fire
             // it is checked if the alarm time has passed.
-            unsafe { timer.alarm(n).write_value(min_timestamp as u32) };
+            // TODO unsafe { timer.alarm(n).write_value(min_timestamp as u32) };
 
             let now = self.now();
 
@@ -103,36 +103,35 @@ impl TimerDriver {
     fn arm(&self) {
         critical_section::with(|cs| {
             let alarms = self.alarms.borrow(cs);
-            let min_timestamp = alarms.iter().min().unwrap();
+            let min_timestamp = alarms.iter().map(|a| a.timestamp.get()).min().unwrap();
             if min_timestamp != u64::MAX {
-                let timer = self.timer.borrow(cs).borrow().unwrap();
-                unsafe { timer.alarm.write_value(min_timestamp as u32) };
+                let timer = self.timer.borrow(cs).borrow_mut().as_mut();
+                // TODO unsafe { timer.alarm.write_value(min_timestamp as u32) };
             } else {
-                unsafe { pac::TIMER.armed().write(|w| w.set_armed(1 << n)) }
+                // TODO unsafe { pac::TIMER.armed().write(|w| w.set_armed(1 << n)) }
             }
+        });
     }
 
     fn check_alarm(&self, n: usize) {
         critical_section::with(|cs| {
             let alarm = &self.alarms.borrow(cs)[n];
-            let timer = self.timer.borrow(cs).borrow().unwrap();
+            let timer = self.timer.borrow(cs).borrow_mut().as_mut();
             let timestamp = alarm.timestamp.get();
             if timestamp <= self.now() {
                 self.trigger_alarm(n, cs)
             } else {
                 // Not elapsed, arm it again.
                 // This can happen if it was set more than 2^32 us in the future.
-                unsafe { timer.alarm(n).write_value(timestamp as u32) };
+                // TODO unsafe { timer.alarm(n).write_value(timestamp as u32) };
             }
+            self.alarm.borrow(cs).borrow_mut().deref_mut().as_mut().unwrap().clear_interrupt();
         });
-
-        // clear the irq
-        unsafe { pac::TIMER.intr().write(|w| w.set_alarm(n, true)) }
     }
 
     fn trigger_alarm(&self, n: usize, cs: CriticalSection) {
         // disarm
-        unsafe { pac::TIMER.armed().write(|w| w.set_armed(1 << n)) }
+        // TODO unsafe { pac::TIMER.armed().write(|w| w.set_armed(1 << n)) }
 
         let alarm = &self.alarms.borrow(cs)[n];
         alarm.timestamp.set(u64::MAX);
@@ -145,15 +144,12 @@ impl TimerDriver {
 }
 
 /// safety: must be called exactly once at bootup
-pub unsafe fn init(timer: Timer) {
+pub unsafe fn init(mut timer: Timer) {
     // init alarms
     critical_section::with(|cs| {
-        // make sure the alarms are not yet taken,
-        // and leak them, so they can be used 
-        timer.alarm0().unwrap();
-        timer.alarm1().unwrap();
-        timer.alarm2().unwrap();
-        timer.alarm3().unwrap();
+        // make sure the alarm is not yet taken,
+        // and leak it, so it can be used safely
+        timer.alarm_0().unwrap();
         DRIVER.timer.borrow(cs).replace(Some(timer));
         let alarms = DRIVER.alarms.borrow(cs);
         for a in alarms {

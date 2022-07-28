@@ -16,9 +16,9 @@ rp2040-boot2 = { version = "0.2.0", optional = true }
 rp2040-hal = { path = "../../rp2040-hal", version = "0.5.0" }
 cortex-m-rt = { version = "0.7", optional = true }
 embedded-time = "0.12.0"
-cyw43 = { version = "0.1.0", git = "https://github.com/embassy-rs/cyw43" }
-embassy = { version = "0.1.0",  features = ["defmt", "time", "time-tick-32768hz"] }
-embassy-net = { version = "0.1.0", features = ["defmt", "tcp", "dhcpv4", "medium-ethernet", "pool-16"] }
+cyw43 = { version = "0.1.0", path = "/home/jan/rp2040/cyw43" }
+embassy = { version = "0.1.0" } # ,  features = ["time", "time-tick-1mhz"] }
+#embassy-net = { version = "0.1.0", features = ["defmt", "tcp", "dhcpv4", "medium-ethernet", "pool-16"] }
 atomic-polyfill = "0.1.8"
 critical-section = "0.2.7"
 #embassy = { version = "0.1.0",  features = ["defmt", "defmt-timestamp-uptime"] }
