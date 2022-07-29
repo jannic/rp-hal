@@ -18,7 +18,11 @@ use embedded_time::rate::*;
 
 // Ensure we halt the program on panic (if we don't mention this crate it won't
 // be linked)
-use panic_halt as _;
+use panic_probe as _;
+use defmt::*;
+use defmt_rtt as _;
+
+
 
 // Pull in any important traits
 use rp_pico_w::hal::prelude::*;
@@ -31,7 +35,13 @@ use rp_pico_w::hal::pac;
 // higher-level drivers.
 use rp_pico_w::hal;
 
+
 use cyw43;
+use embassy::executor::raw::TaskPool;
+use embassy::executor::Executor;
+use embassy::executor::Spawner;
+use core::future::Future;
+use embassy::time::{Duration, Timer};
 
 /// Entry point to our bare-metal application.
 ///
@@ -42,6 +52,9 @@ use cyw43;
 /// infinite loop.
 #[entry]
 fn main() -> ! {
+
+    info!("start");
+
     // Grab our singleton objects
     let mut pac = pac::Peripherals::take().unwrap();
     let core = pac::CorePeripherals::take().unwrap();
@@ -64,25 +77,65 @@ fn main() -> ! {
     .ok()
     .unwrap();
 
+
+    let sio = hal::Sio::new(pac.SIO);
+
+    let pins = rp_pico_w::Pins::new(
+        pac.IO_BANK0,
+        pac.PADS_BANK0,
+        sio.gpio_bank0,
+        &mut pac.RESETS,
+    );
+
+    info!("init time driver!");
+    let timer = hal::timer::Timer::new(pac.TIMER, &mut pac.RESETS);
+    unsafe { rp_pico_w::embassy_time_driver::init(timer) };
+
     // The delay object lets us wait for specified amounts of time (in
     // milliseconds)
     let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
 
+    let mut executor = Executor::new();
+
+    // Safety: function never returns, executor is never dropped
+    let executor: &'static mut Executor = unsafe { forever_mut( &mut executor ) };
+
+    let mut task_pool: TaskPool<_, 10> = TaskPool::new();
+    let task_pool = unsafe { forever(&mut task_pool) };
+
+    executor.run(|spawner| {
+        let spawn_token = task_pool.spawn(|| run(spawner, pins, delay));
+        spawner.spawn(spawn_token);
+    });
+
+}
+
+unsafe fn forever_mut<T>(r: &'_ mut T) -> &'static mut T {
+    core::mem::transmute(r)
+}
+
+unsafe fn forever<T>(r: &'_ T) -> &'static T {
+    core::mem::transmute(r)
+}
+
+async fn run(spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::delay::Delay) {
     // Set the LED to be an output
     // TODO fix this, the on-board LED is not directly accessible on a
     // GPIO pin, but only via the WLAN chip.
     // let mut led_pin = pins.led.into_push_pull_output();
-    
-
-    let executor = embassy::executor::Executor::new();
-
+    let mut led_pin = pins.gpio0.into_push_pull_output();
+    //let mut other_pin = pins.gpio1.into_push_pull_output();
     // Blink the LED at 1 Hz
     loop {
-        // led_pin.set_high().unwrap();
+        info!("on");
+        led_pin.set_high().unwrap();
+        use embedded_hal::digital::v2::OutputPin;
+        Timer::after(Duration::from_millis(500)).await;
+        //delay.delay_ms(500);
+        info!("off");
+        led_pin.set_low().unwrap();
         delay.delay_ms(500);
-        // led_pin.set_low().unwrap();
-        delay.delay_ms(500);
+        //Timer::after(Duration::from_millis(500)).await;
     }
 }
 
-// End of file
