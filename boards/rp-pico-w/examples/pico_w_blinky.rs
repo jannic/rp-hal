@@ -103,8 +103,11 @@ fn main() -> ! {
     let mut task_pool: TaskPool<_, 10> = TaskPool::new();
     let task_pool = unsafe { forever(&mut task_pool) };
 
+    let state = cyw43::State::new();
+    let state = forever(&cyw43::State::new());
+
     executor.run(|spawner| {
-        let spawn_token = task_pool.spawn(|| run(spawner, pins, delay));
+        let spawn_token = task_pool.spawn(|| run(spawner, pins, delay, state));
         spawner.spawn(spawn_token);
     });
 
@@ -118,13 +121,21 @@ unsafe fn forever<T>(r: &'_ T) -> &'static T {
     core::mem::transmute(r)
 }
 
-async fn run(spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::delay::Delay) {
+async fn run(spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::delay::Delay, state: &cyw43::State) {
     // Set the LED to be an output
     // TODO fix this, the on-board LED is not directly accessible on a
     // GPIO pin, but only via the WLAN chip.
     // let mut led_pin = pins.led.into_push_pull_output();
     let mut led_pin = pins.gpio0.into_push_pull_output();
     //let mut other_pin = pins.gpio1.into_push_pull_output();
+
+    let mut pwr = pins.wl_on.into_push_pull_output();;
+    let spi = SpiDevice::new();
+    
+    let fw = include_bytes!("firmware/43439A0.bin");
+    
+    let (mut control, runner) = cyw43::new(state, pwr, spi, fw).await;
+
     // Blink the LED at 1 Hz
     loop {
         info!("on");
@@ -139,3 +150,19 @@ async fn run(spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::dela
     }
 }
 
+struct SpiDevice {
+}
+
+impl SpiDevice {
+    fn new() -> Self {
+        SpiDevice {}
+    }
+}
+
+impl embedded_hal_1::spi::ErrorType for SpiDevice {
+    use crate::hal::spi::SpiInfallible;
+    type Error = SpiInfallible;
+}
+
+impl cyw43::SpiDevice for SpiDevice {
+}
