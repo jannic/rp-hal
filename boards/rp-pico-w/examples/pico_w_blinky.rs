@@ -129,7 +129,7 @@ async fn run(spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::dela
     let mut led_pin = pins.gpio0.into_push_pull_output();
     //let mut other_pin = pins.gpio1.into_push_pull_output();
 
-    let mut pwr = pins.wl_on.into_push_pull_output();;
+    let mut pwr = pins.wl_on.into_push_pull_output();
     let spi = SpiDevice::new();
     
     let fw = include_bytes!("firmware/43439A0.bin");
@@ -150,19 +150,19 @@ async fn run(spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::dela
     }
 }
 
-struct SpiDevice {
+struct SpiDevice<DEV: rp2040_hal::spi::SpiDevice> {
+    dev: DEV,
 }
 
-impl SpiDevice {
+impl<DEV> SpiDevice<DEV> {
     fn new() -> Self {
         SpiDevice {}
     }
 }
 
-impl embedded_hal_1::spi::ErrorType for SpiDevice {
-    use crate::hal::spi::SpiInfallible;
-    type Error = SpiInfallible;
+impl<DEV> embedded_hal_1::spi::ErrorType for SpiDevice<DEV> {
+    type Error = DEV::Error;
 }
 
-impl cyw43::SpiDevice for SpiDevice {
+impl<DEV> cyw43::SpiDevice for SpiDevice<DEV> {
 }
