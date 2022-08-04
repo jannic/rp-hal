@@ -177,6 +177,9 @@ impl<D: SpiDevice, const DS: u8> Spi<Enabled, D, DS> {
     fn is_readable(&self) -> bool {
         self.device.sspsr.read().rne().bit_is_set()
     }
+    fn is_busy(&self) -> bool {
+        self.device.sspsr.read().bsy().bit_is_set()
+    }
 
     /// Disable the spi to reset its configuration
     pub fn disable(self) -> Spi<Disabled, D, DS> {
@@ -267,6 +270,102 @@ macro_rules! impl_write {
                 self.device
                     .sspdr
                     .write(|w| unsafe { w.data().bits(word as u16) });
+                Ok(())
+            }
+        }
+
+        #[cfg(feature = "eh1_0_alpha")]
+        impl<D: SpiDevice> eh1::blocking::SpiBus<$type> for Spi<Enabled, D, $nr> {
+            fn transfer(&mut self, read: &mut [$type], write: &[$type]) -> Result<(), <Self as eh1::ErrorType>::Error> {
+                let len = read.len().max(write.len());
+                for i in 0..len {
+                    // Write to TX FIFO whilst ignoring RX, then clean up afterward. When RX
+                    // is full, PL022 inhibits RX pushes, and sets a sticky flag on
+                    // push-on-full, but continues shifting. Safe if SSPIMSC_RORIM is not set.
+                    while !self.is_writable() {}
+
+                    let word = if i < write.len() { write[i] } else { 0 };
+
+                    self.device
+                        .sspdr
+                        .write(|w| unsafe { w.data().bits(word as u16) });
+
+                    while !self.is_readable() {}
+
+                    let word = self.device.sspdr.read().data().bits() as $type;
+
+                    if i < read.len() {
+                        read[i] = word;
+                    }
+                }
+                Ok(())
+            }
+            fn transfer_in_place(&mut self, words: &mut [$type]) -> Result<(), <Self as eh1::ErrorType>::Error> {
+                let len = words.len();
+                for i in 0..len {
+                    // Write to TX FIFO whilst ignoring RX, then clean up afterward. When RX
+                    // is full, PL022 inhibits RX pushes, and sets a sticky flag on
+                    // push-on-full, but continues shifting. Safe if SSPIMSC_RORIM is not set.
+                    while !self.is_writable() {}
+
+                    self.device
+                        .sspdr
+                        .write(|w| unsafe { w.data().bits(words[i] as u16) });
+
+                    while !self.is_readable() {}
+
+                    words[i] = self.device.sspdr.read().data().bits() as $type;
+                }
+                Ok(())
+            }
+        }
+        #[cfg(feature = "eh1_0_alpha")]
+        impl<D: SpiDevice> eh1::blocking::SpiBusRead<$type> for Spi<Enabled, D, $nr> {
+            fn read(&mut self, buf: &mut [$type]) -> Result<(), <Self as eh1::ErrorType>::Error> {
+                let len = buf.len();
+                for i in 0..len {
+                    // Write to TX FIFO whilst ignoring RX, then clean up afterward. When RX
+                    // is full, PL022 inhibits RX pushes, and sets a sticky flag on
+                    // push-on-full, but continues shifting. Safe if SSPIMSC_RORIM is not set.
+                    while !self.is_writable() {}
+
+                    self.device
+                        .sspdr
+                        .write(|w| unsafe { w.data().bits(0u16) });
+
+                    while !self.is_readable() {}
+
+                    buf[i] = self.device.sspdr.read().data().bits() as $type;
+                }
+                Ok(())
+            }
+        }
+
+        #[cfg(feature = "eh1_0_alpha")]
+        impl<D: SpiDevice> eh1::blocking::SpiBusWrite<$type> for Spi<Enabled, D, $nr> {
+            fn write(&mut self, buf: &[$type]) -> Result<(), <Self as eh1::ErrorType>::Error> {
+                let len = buf.len();
+                for i in 0..len {
+                    // Write to TX FIFO whilst ignoring RX, then clean up afterward. When RX
+                    // is full, PL022 inhibits RX pushes, and sets a sticky flag on
+                    // push-on-full, but continues shifting. Safe if SSPIMSC_RORIM is not set.
+                    while !self.is_writable() {}
+
+                    self.device
+                        .sspdr
+                        .write(|w| unsafe { w.data().bits(buf[i] as u16) });
+
+                    while !self.is_readable() {}
+
+                    self.device.sspdr.read().data().bits() as $type;
+                }
+                Ok(())
+            }
+        }
+        #[cfg(feature = "eh1_0_alpha")]
+        impl<D: SpiDevice> eh1::blocking::SpiBusFlush for Spi<Enabled, D, $nr> {
+            fn flush(&mut self) -> Result<(), <Self as eh1::ErrorType>::Error> {
+                while self.is_busy() {}
                 Ok(())
             }
         }
