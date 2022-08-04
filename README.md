@@ -151,6 +151,7 @@ RP2040 chip according to how it is connected up on the Feather RP2040.
 [adafruit-feather-rp2040]: https://github.com/rp-rs/rp-hal/tree/main/boards/adafruit-feather-rp2040
 
 ### [adafruit-itsy-bitsy-rp2040] - Board Support for the [Adafruit ItsyBitsy RP2040]
+
 You should include this crate if you are writing code that you want to run on
 an [Adafruit ItsyBitsy RP2040] - an RP2040 board in the ItsyBitsy family.
 
@@ -161,6 +162,7 @@ RP2040 chip according to how it is connected up on the ItsyBitsy RP2040.
 [adafruit-itsy-bitsy-rp2040]: https://github.com/rp-rs/rp-hal/tree/main/boards/adafruit-itsy-bitsy-rp2040
 
 ### [adafruit-kb2040] - Board Support for the [Adafruit KB2040]
+
 You should include this crate if you are writing code that you want to run on
 an [Adafruit KB2040] - an Arduino Pro Micro-shaped board for keyboards.
 
@@ -225,7 +227,7 @@ This crate includes the [rp2040-hal], but also configures each pin of the
 RP2040 chip according to how it is connected up on the Pico Lipo.
 
 Note that if you use this crate the compiler will expect the full 16MB flash
-space, and so it may not work if you only have the 4MB variant. 
+space, and so it may not work if you only have the 4MB variant.
 
 [Pimoroni Pico Lipo 16MB]: https://shop.pimoroni.com/products/pimoroni-pico-lipo?variant=39335427080275
 [pimoroni-pico-lipo-16mb]: https://github.com/rp-rs/rp-hal/tree/main/boards/pimoroni-pico-lipo-16mb
@@ -285,6 +287,17 @@ RP2040 chip according to how it is connected up on the XIAO RP2040.
 
 [Seeeduino XIAO RP2040]: https://www.seeedstudio.com/XIAO-RP2040-v1-0-p-5026.html
 [seeeduino-xiao-rp2040]: https://github.com/rp-rs/rp-hal/tree/main/boards/seeeduino-xiao-rp2040
+
+### [vcc-gnd-yd-rp2040] - Board Support for the [VCC-GND Studio YD-RP2040]
+
+You should include this crate if you are writing code that you want to run on
+a [VCC-GND Studio YD-RP2040] - a PCB for the RP2040 chip with USB-C port, WS2812 RGB LED on GPIO23, user key on GPIO24 and built-in blue LED.
+
+This crate includes the [rp2040-hal], but also configures each pin of the
+RP2040 chip according to how it is connected up on the YD-RP2040.
+
+[VCC-GND Studio YD-RP2040]: http://152.32.187.208:8080/yd-data/YD-RP2040/
+[vcc-gnd-yd-rp2040]: https://github.com/rp-rs/rp-hal/tree/main/boards/vcc-gnd-yd-rp2040
 
 <!-- PROGRAMMING -->
 ## Programming
@@ -405,7 +418,6 @@ remain volatile until a 1.0.0 release.
 
 See the [open issues](https://github.com/rp-rs/rp-hal/issues) for a list of
 proposed features (and known issues).
-
 
 <!-- CONTRIBUTING -->
 ## Contributing
