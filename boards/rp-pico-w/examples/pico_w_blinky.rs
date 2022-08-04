@@ -35,6 +35,7 @@ use rp_pico_w::hal::pac;
 // higher-level drivers.
 use rp_pico_w::hal;
 
+use embedded_hal_1 as eh_1;
 
 use cyw43;
 use embassy::executor::raw::TaskPool;
@@ -106,8 +107,21 @@ fn main() -> ! {
     let state = cyw43::State::new();
     let state = forever(&cyw43::State::new());
 
+    // These are implicitly used by the spi driver if they are in the correct mode
+    let _spi_sclk = pins.gpio6.into_mode::<hal::gpio::FunctionSpi>();
+    let _spi_mosi = pins.gpio7.into_mode::<hal::gpio::FunctionSpi>();
+    let _spi_miso = pins.gpio4.into_mode::<hal::gpio::FunctionSpi>();
+    let rp_spi = hal::Spi::<_, _, 8>::new(pac.SPI0);
+    let mut rp_spi = rp_spi.init(
+        &mut pac.RESETS,
+        clocks.peripheral_clock.freq(),
+        16_000_000u32.Hz(),
+        &embedded_hal::spi::MODE_0,
+    );
+
+
     executor.run(|spawner| {
-        let spawn_token = task_pool.spawn(|| run(spawner, pins, delay, state));
+        let spawn_token = task_pool.spawn(|| run(spawner, pins, delay, state, rp_spi));
         spawner.spawn(spawn_token);
     });
 
@@ -121,7 +135,11 @@ unsafe fn forever<T>(r: &'_ T) -> &'static T {
     core::mem::transmute(r)
 }
 
-async fn run(spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::delay::Delay, state: &cyw43::State) {
+async fn run<SPI>(spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::delay::Delay, state: &cyw43::State, rp_spi: SPI) 
+where
+    SPI: eh_1::spi::blocking::SpiDevice,
+    SPI::Bus: eh_1::spi::blocking::SpiBus,
+{
     // Set the LED to be an output
     // TODO fix this, the on-board LED is not directly accessible on a
     // GPIO pin, but only via the WLAN chip.
@@ -130,7 +148,8 @@ async fn run(spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::dela
     //let mut other_pin = pins.gpio1.into_push_pull_output();
 
     let mut pwr = pins.wl_on.into_push_pull_output();
-    let spi = SpiDevice::new();
+
+    let spi = SpiDevice::new(rp_spi);
     
     let fw = include_bytes!("firmware/43439A0.bin");
     
@@ -150,19 +169,47 @@ async fn run(spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::dela
     }
 }
 
-struct SpiDevice<DEV: rp2040_hal::spi::SpiDevice> {
-    dev: DEV,
+struct SpiDevice<SPI>
+where
+    SPI: eh_1::spi::blocking::SpiDevice,
+    SPI::Bus: eh_1::spi::blocking::SpiBus,
+{
+    dev: SPI,
 }
 
-impl<DEV> SpiDevice<DEV> {
-    fn new() -> Self {
-        SpiDevice {}
+impl<SPI> SpiDevice<SPI>
+where
+    SPI: eh_1::spi::blocking::SpiDevice,
+    SPI::Bus: eh_1::spi::blocking::SpiBus,
+    {
+    fn new(dev: SPI) -> Self {
+        SpiDevice {
+            dev
+        }
     }
 }
 
-impl<DEV> embedded_hal_1::spi::ErrorType for SpiDevice<DEV> {
-    type Error = DEV::Error;
+impl<SPI> embedded_hal_1::spi::ErrorType for SpiDevice<SPI> 
+where
+    SPI: eh_1::spi::blocking::SpiDevice,
+    SPI::Bus: eh_1::spi::blocking::SpiBus,
+{
+    type Error = core::convert::Infallible;
 }
 
-impl<DEV> cyw43::SpiDevice for SpiDevice<DEV> {
+impl<SPI> cyw43::SpiDevice for SpiDevice<SPI>
+where
+    SPI: eh_1::spi::blocking::SpiDevice,
+    SPI::Bus: eh_1::spi::blocking::SpiBus,
+    SPI::Bus: eh_1::spi::blocking::SpiBusRead<u32>,
+{
+    type Bus = SPI::Bus;
+
+    fn transaction<'a, R, F, Fut>(&'a mut self, f: F) -> dyn Future<Output = Result<R, <Self::Bus as ErrorType>::Error>>
+    where
+        F: FnOnce(*mut Self::Bus) -> Fut + 'a,
+        Fut: Future<Output = Result<R, <Self::Bus as ErrorType>::Error>> + 'a {
+            todo!();
+    }
+
 }
