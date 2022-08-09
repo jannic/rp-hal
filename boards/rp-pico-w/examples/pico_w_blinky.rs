@@ -135,10 +135,13 @@ unsafe fn forever<T>(r: &'_ T) -> &'static T {
     core::mem::transmute(r)
 }
 
-async fn run<SPI>(spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::delay::Delay, state: &cyw43::State, rp_spi: SPI) 
+use embedded_hal_1::spi::blocking::{SpiBusRead, SpiBusWrite, SpiBus, SpiDevice};
+
+async fn run<SPI>(spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::delay::Delay, state: &cyw43::State, spi: SPI) 
 where
-    SPI: eh_1::spi::blocking::SpiDevice,
-    SPI::Bus: eh_1::spi::blocking::SpiBus,
+    SPI: SpiDevice,
+    SPI::Bus: SpiBus + SpiBusWrite<u32> + SpiBusRead<u32>,
+
 {
     // Set the LED to be an output
     // TODO fix this, the on-board LED is not directly accessible on a
@@ -149,8 +152,6 @@ where
 
     let mut pwr = pins.wl_on.into_push_pull_output();
 
-    let spi = SpiDevice::new(rp_spi);
-    
     let fw = include_bytes!("firmware/43439A0.bin");
     
     let (mut control, runner) = cyw43::new(state, pwr, spi, fw).await;
@@ -167,49 +168,4 @@ where
         delay.delay_ms(500);
         //Timer::after(Duration::from_millis(500)).await;
     }
-}
-
-struct SpiDevice<SPI>
-where
-    SPI: eh_1::spi::blocking::SpiDevice,
-    SPI::Bus: eh_1::spi::blocking::SpiBus,
-{
-    dev: SPI,
-}
-
-impl<SPI> SpiDevice<SPI>
-where
-    SPI: eh_1::spi::blocking::SpiDevice,
-    SPI::Bus: eh_1::spi::blocking::SpiBus,
-    {
-    fn new(dev: SPI) -> Self {
-        SpiDevice {
-            dev
-        }
-    }
-}
-
-impl<SPI> embedded_hal_1::spi::ErrorType for SpiDevice<SPI> 
-where
-    SPI: eh_1::spi::blocking::SpiDevice,
-    SPI::Bus: eh_1::spi::blocking::SpiBus,
-{
-    type Error = core::convert::Infallible;
-}
-
-impl<SPI> cyw43::SpiDevice for SpiDevice<SPI>
-where
-    SPI: eh_1::spi::blocking::SpiDevice,
-    SPI::Bus: eh_1::spi::blocking::SpiBus,
-    SPI::Bus: eh_1::spi::blocking::SpiBusRead<u32>,
-{
-    type Bus = SPI::Bus;
-
-    fn transaction<'a, R, F, Fut>(&'a mut self, f: F) -> dyn Future<Output = Result<R, <Self::Bus as ErrorType>::Error>>
-    where
-        F: FnOnce(*mut Self::Bus) -> Fut + 'a,
-        Fut: Future<Output = Result<R, <Self::Bus as ErrorType>::Error>> + 'a {
-            todo!();
-    }
-
 }
