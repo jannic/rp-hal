@@ -164,8 +164,10 @@ impl TimerDriver {
 
         // Call after clearing alarm, so the callback can set another alarm.
         if let Some((f, ctx)) = alarm.callback.get() {
+            info!("callback:");
             f(ctx);
         }
+        info!("callback executed");
     }
 
     fn next_scheduled_alarm(&self) -> (usize, u64) {
