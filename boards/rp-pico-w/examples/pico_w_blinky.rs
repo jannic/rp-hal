@@ -23,6 +23,7 @@ use defmt::*;
 use defmt_rtt as _;
 
 
+use core::convert::Infallible;
 
 // Pull in any important traits
 use rp_pico_w::hal::prelude::*;
@@ -36,6 +37,15 @@ use rp_pico_w::hal::pac;
 use rp_pico_w::hal;
 
 use embedded_hal_1 as eh_1;
+
+use hal::gpio::PushPullOutput;
+
+use eh_1::spi::ErrorType;
+use eh_1::spi::blocking::SpiBusFlush;
+
+// use eh_1::blocking::OutputPin;
+use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::digital::v2::InputPin;
 
 use cyw43;
 use embassy::executor::raw::TaskPool;
@@ -105,23 +115,13 @@ fn main() -> ! {
     let task_pool = unsafe { forever(&mut task_pool) };
 
     let state = cyw43::State::new();
-    let state = forever(&cyw43::State::new());
+    let state = unsafe { forever(&cyw43::State::new()) };
 
-    // These are implicitly used by the spi driver if they are in the correct mode
-    let _spi_sclk = pins.gpio6.into_mode::<hal::gpio::FunctionSpi>();
-    let _spi_mosi = pins.gpio7.into_mode::<hal::gpio::FunctionSpi>();
-    let _spi_miso = pins.gpio4.into_mode::<hal::gpio::FunctionSpi>();
-    let rp_spi = hal::Spi::<_, _, 8>::new(pac.SPI0);
-    let mut rp_spi = rp_spi.init(
-        &mut pac.RESETS,
-        clocks.peripheral_clock.freq(),
-        16_000_000u32.Hz(),
-        &embedded_hal::spi::MODE_0,
-    );
-
-
+    info!("run spawner");
     executor.run(|spawner| {
-        let spawn_token = task_pool.spawn(|| run(spawner, pins, delay, state, rp_spi));
+        info!("create spawn token");
+        let spawn_token = task_pool.spawn(|| run(spawner, pins, delay, state));
+        info!("spawn it!");
         spawner.spawn(spawn_token);
     });
 
@@ -137,12 +137,15 @@ unsafe fn forever<T>(r: &'_ T) -> &'static T {
 
 use embedded_hal_1::spi::blocking::{SpiBusRead, SpiBusWrite, SpiBus, SpiDevice};
 
-async fn run<SPI>(spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::delay::Delay, state: &cyw43::State, spi: SPI) 
-where
-    SPI: SpiDevice,
-    SPI::Bus: SpiBus + SpiBusWrite<u32> + SpiBusRead<u32>,
-
+async fn run(spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::delay::Delay, state: &cyw43::State) 
 {
+    // These are implicitly used by the spi driver if they are in the correct mode
+    let spi_clk = pins.voltage_monitor_wl_clk.into_push_pull_output();
+    let spi_mosi_miso = pins.wl_d.into();
+    let spi_cs = pins.wl_cs.into_push_pull_output();
+
+    let bus = MySpi { clk: spi_clk, dio: spi_mosi_miso };
+    let spi = eh_1::spi::blocking::ExclusiveDevice::new(bus, spi_cs);
     // Set the LED to be an output
     // TODO fix this, the on-board LED is not directly accessible on a
     // GPIO pin, but only via the WLAN chip.
@@ -154,7 +157,9 @@ where
 
     let fw = include_bytes!("firmware/43439A0.bin");
     
+    info!("create cyw43 driver");
     let (mut control, runner) = cyw43::new(state, pwr, spi, fw).await;
+    info!("created cyw43 driver");
 
     // Blink the LED at 1 Hz
     loop {
@@ -167,5 +172,81 @@ where
         led_pin.set_low().unwrap();
         delay.delay_ms(500);
         //Timer::after(Duration::from_millis(500)).await;
+    }
+}
+
+
+////////////////////////////////////////////////////////////
+
+struct MySpi {
+    /// SPI clock
+    clk: hal::gpio::Pin<hal::gpio::bank0::Gpio29, hal::gpio::Output<hal::gpio::PushPull>>,
+
+    /// 4 signals, all in one!!
+    /// - SPI MISO
+    /// - SPI MOSI
+    /// - IRQ
+    /// - strap to set to gSPI mode on boot.
+    dio: hal::gpio::dynpin::DynPin,
+}
+
+impl ErrorType for MySpi {
+    type Error = Infallible;
+}
+
+impl SpiBusFlush for MySpi {
+    fn flush<'a>(&'a mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+
+impl SpiBusRead<u32> for MySpi {
+    fn read<'a>(&'a mut self, words: &'a mut [u32]) -> Result<(), Self::Error> {
+        self.dio.into_floating_input();
+        for word in words {
+            let mut w = 0;
+            for _ in 0..32 {
+                w = w << 1;
+
+                // rising edge, sample data
+                if self.dio.is_high().unwrap() {
+                    w |= 0x01;
+                }
+                self.clk.set_high();
+
+                // falling edge
+                self.clk.set_low();
+            }
+            *word = w
+        }
+
+        Ok(())
+    }
+}
+
+impl SpiBusWrite<u32> for MySpi {
+    fn write<'a>(&'a mut self, words: &'a [u32]) -> Result<(), Self::Error> {
+        self.dio.into_push_pull_output();
+        for word in words {
+            let mut word = *word;
+            for _ in 0..32 {
+                // falling edge, setup data
+                self.clk.set_low();
+                if word & 0x8000_0000 == 0 {
+                    self.dio.set_low();
+                } else {
+                    self.dio.set_high();
+                }
+
+                // rising edge
+                self.clk.set_high();
+
+                word = word << 1;
+            }
+        }
+        self.clk.set_low();
+
+        self.dio.into_floating_input();
+        Ok(())
     }
 }
