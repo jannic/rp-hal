@@ -140,9 +140,16 @@ use embedded_hal_1::spi::blocking::{SpiBusRead, SpiBusWrite, SpiBus, SpiDevice};
 async fn run(spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::delay::Delay, state: &cyw43::State) 
 {
     // These are implicitly used by the spi driver if they are in the correct mode
-    let spi_clk = pins.voltage_monitor_wl_clk.into_push_pull_output();
-    let spi_mosi_miso = pins.wl_d.into();
-    let spi_cs = pins.wl_cs.into_push_pull_output();
+    let mut spi_cs: hal::gpio::dynpin::DynPin = pins.wl_cs.into();
+    spi_cs.set_high();
+    spi_cs.into_push_pull_output();
+
+    let mut spi_clk = pins.voltage_monitor_wl_clk.into_push_pull_output();
+    spi_clk.set_low();
+
+    let mut spi_mosi_miso: hal::gpio::dynpin::DynPin = pins.wl_d.into();
+    spi_mosi_miso.set_low();
+    spi_mosi_miso.into_push_pull_output();
 
     let bus = MySpi { clk: spi_clk, dio: spi_mosi_miso };
     let spi = eh_1::spi::blocking::ExclusiveDevice::new(bus, spi_cs);
@@ -202,35 +209,41 @@ impl SpiBusFlush for MySpi {
 
 impl SpiBusRead<u32> for MySpi {
     fn read<'a>(&'a mut self, words: &'a mut [u32]) -> Result<(), Self::Error> {
+        info!("spi read {}", words.len());
         self.dio.into_floating_input();
-        for word in words {
+        for word in words.iter_mut() {
             let mut w = 0;
             for _ in 0..32 {
                 w = w << 1;
 
+                cortex_m::asm::nop(); 
                 // rising edge, sample data
                 if self.dio.is_high().unwrap() {
                     w |= 0x01;
                 }
                 self.clk.set_high();
 
+                cortex_m::asm::nop(); 
                 // falling edge
                 self.clk.set_low();
             }
             *word = w
         }
 
+        info!("spi read result: {:x}", words);
         Ok(())
     }
 }
 
 impl SpiBusWrite<u32> for MySpi {
     fn write<'a>(&'a mut self, words: &'a [u32]) -> Result<(), Self::Error> {
+        info!("spi write {:x}", words);
         self.dio.into_push_pull_output();
         for word in words {
             let mut word = *word;
             for _ in 0..32 {
                 // falling edge, setup data
+                cortex_m::asm::nop(); 
                 self.clk.set_low();
                 if word & 0x8000_0000 == 0 {
                     self.dio.set_low();
@@ -238,12 +251,14 @@ impl SpiBusWrite<u32> for MySpi {
                     self.dio.set_high();
                 }
 
+                cortex_m::asm::nop(); 
                 // rising edge
                 self.clk.set_high();
 
                 word = word << 1;
             }
         }
+        cortex_m::asm::nop(); 
         self.clk.set_low();
 
         self.dio.into_floating_input();
