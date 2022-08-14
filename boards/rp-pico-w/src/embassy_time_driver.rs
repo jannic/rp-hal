@@ -134,6 +134,9 @@ impl TimerDriver {
         info!("checking alarm");
         let next = self.next_scheduled_alarm();
         if next.1 == u64::MAX {
+            critical_section::with(|cs| {
+                self.alarm.borrow(cs).borrow_mut().deref_mut().as_mut().unwrap().clear_interrupt();
+            });
             return;
         }
         let n = next.0;
