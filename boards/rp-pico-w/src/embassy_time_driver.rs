@@ -76,7 +76,7 @@ impl Driver for TimerDriver {
 
     fn set_alarm(&self, alarm: AlarmHandle, timestamp: u64) {
         let n = alarm.id() as usize;
-        info!("set alarm {} to {}", n, timestamp);
+        trace!("set alarm {} to {}", n, timestamp);
         critical_section::with(|cs| {
             let alarms = self.alarms.borrow(cs);
             let alarm = &alarms[n];
@@ -93,8 +93,8 @@ impl Driver for TimerDriver {
 
             if min_timestamp >= now {
                 use embedded_time::{duration::*};
-                self.alarm.borrow(cs).borrow_mut().deref_mut().as_mut().unwrap().schedule(((min_timestamp - now) as u32).microseconds()).unwrap();
-                info!("alarm armed for {}", min_timestamp - now);
+                self.alarm.borrow(cs).borrow_mut().deref_mut().as_mut().unwrap().schedule(((min_timestamp - now) as u32).microseconds()).ok(); // TODO: ok to ignore?
+                trace!("alarm armed for {}", min_timestamp - now);
             }
             let now = self.now();
 
@@ -133,7 +133,7 @@ impl TimerDriver {
     */
 
     fn check_alarm(&self) {
-        info!("checking alarm");
+        trace!("checking alarm");
         let next = self.next_scheduled_alarm();
         if next.1 == u64::MAX {
             critical_section::with(|cs| {
@@ -160,7 +160,7 @@ impl TimerDriver {
     }
 
     fn trigger_alarm(&self, n: usize, cs: CriticalSection) {
-        info!("triggered alarm {}", n);
+        trace!("triggered alarm {}", n);
         // disarm
         // ignore... for now unsafe { pac::TIMER.armed().write(|w| w.set_armed(1 << n)) }
 
@@ -169,10 +169,10 @@ impl TimerDriver {
 
         // Call after clearing alarm, so the callback can set another alarm.
         if let Some((f, ctx)) = alarm.callback.get() {
-            info!("callback:");
+            trace!("callback:");
             f(ctx);
         }
-        info!("callback executed");
+        trace!("callback executed");
     }
 
     fn next_scheduled_alarm(&self) -> (usize, u64) {
@@ -194,7 +194,7 @@ pub unsafe fn init(mut timer: Timer) {
         //unsafe {
             pac::NVIC::unmask(pac::Interrupt::TIMER_IRQ_0);
         //}
-        info!("interrupt enabled!");
+        trace!("interrupt enabled!");
         DRIVER.alarm.borrow(cs).replace(Some(alarm));
         DRIVER.timer.borrow(cs).replace(Some(timer));
         let alarms = DRIVER.alarms.borrow(cs);
@@ -221,7 +221,7 @@ pub unsafe fn init(mut timer: Timer) {
 
 #[interrupt]
 unsafe fn TIMER_IRQ_0() {
-    info!("Interrupt!");
+    trace!("Interrupt!");
     DRIVER.check_alarm()
 }
 

@@ -113,7 +113,8 @@ fn main() -> ! {
     let mut task_pool: TaskPool<_, 10> = TaskPool::new();
     let task_pool = unsafe { forever(&mut task_pool) };
 
-    let state = unsafe { forever(&cyw43::State::new()) };
+    let mut state = cyw43::State::new();
+    let state = unsafe { forever(&state) };
 
     info!("run spawner");
     executor.run(|spawner| {
@@ -122,7 +123,6 @@ fn main() -> ! {
         info!("spawn it!");
         spawner.spawn(spawn_token).unwrap();
     });
-
 }
 
 unsafe fn forever_mut<T>(r: &'_ mut T) -> &'static mut T {
@@ -135,7 +135,7 @@ unsafe fn forever<T>(r: &'_ T) -> &'static T {
 
 use embedded_hal_1::spi::blocking::{SpiBusRead, SpiBusWrite};
 
-async fn run(_spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::delay::Delay, state: &cyw43::State) 
+async fn run(spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::delay::Delay, state: &'static cyw43::State) 
 {
     // These are implicitly used by the spi driver if they are in the correct mode
     let mut spi_cs: hal::gpio::dynpin::DynPin = pins.wl_cs.into();
@@ -167,9 +167,26 @@ async fn run(_spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::del
 
     let fw = include_bytes!("firmware/43439A0.bin");
 
+    use embassy_futures::yield_now;
+    yield_now().await;
+
     info!("create cyw43 driver");
-    let (_control, _runner) = cyw43::new(state, pwr, spi, fw).await;
+    let (mut control, runner) = cyw43::new(state, pwr, spi, fw).await;
     info!("created cyw43 driver");
+
+    let mut task_pool: TaskPool<_, 10> = TaskPool::new();
+    let task_pool = unsafe { forever(&mut task_pool) };
+    let spawn_token = task_pool.spawn(|| runner.run() );
+    spawner.spawn(spawn_token).unwrap();
+
+
+    let clm = include_bytes!("firmware/43439A0_clm.bin");
+    info!("init net net device");
+    let net_device = control.init(clm).await;
+    info!("init net net device done");
+
+    // control.join_wpa2(env!("WIFI_NETWORK"), env!("WIFI_PASSWORD")).await;
+    control.join_open("Freifunk").await;
 
     // Blink the LED at 1 Hz
     loop {
@@ -211,14 +228,13 @@ impl SpiBusFlush for MySpi {
 
 impl SpiBusRead<u32> for MySpi {
     fn read<'a>(&'a mut self, words: &'a mut [u32]) -> Result<(), Self::Error> {
-        info!("spi read {}", words.len());
+        trace!("spi read {}", words.len());
         self.dio.into_floating_input();
         for word in words.iter_mut() {
             let mut w = 0;
             for _ in 0..32 {
                 w = w << 1;
 
-                cortex_m::asm::nop();
                 cortex_m::asm::nop();
                 // rising edge, sample data
                 if self.dio.is_high().unwrap() {
@@ -227,27 +243,25 @@ impl SpiBusRead<u32> for MySpi {
                 self.clk.set_high().unwrap();
 
                 cortex_m::asm::nop();
-                cortex_m::asm::nop();
                 // falling edge
                 self.clk.set_low().unwrap();
             }
             *word = w
         }
 
-        info!("spi read result: {:x}", words);
+        trace!("spi read result: {:x}", words);
         Ok(())
     }
 }
 
 impl SpiBusWrite<u32> for MySpi {
     fn write<'a>(&'a mut self, words: &'a [u32]) -> Result<(), Self::Error> {
-        info!("spi write {:x}", words);
+        trace!("spi write {:x}", words);
         self.dio.into_push_pull_output();
         for word in words {
             let mut word = *word;
             for _ in 0..32 {
                 // falling edge, setup data
-                cortex_m::asm::nop();
                 cortex_m::asm::nop();
                 self.clk.set_low().unwrap();
                 if word & 0x8000_0000 == 0 {
@@ -256,7 +270,6 @@ impl SpiBusWrite<u32> for MySpi {
                     self.dio.set_high().unwrap();
                 }
 
-                cortex_m::asm::nop();
                 cortex_m::asm::nop();
                 // rising edge
                 self.clk.set_high().unwrap();
