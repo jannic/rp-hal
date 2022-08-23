@@ -41,22 +41,22 @@ boot2 = ["rp2040-boot2"]
 rt = ["cortex-m-rt","rp2040-hal/rt"]
 
 
-# cargo build/run
-[profile.dev]
-codegen-units = 1
-debug = 2
-debug-assertions = true
-incremental = false
-opt-level = 0
-overflow-checks = true
-
-# cargo build/run --release
-[profile.release]
-codegen-units = 1
-debug = 2
-debug-assertions = false
-incremental = false
-lto = 'fat'
-opt-level = 3
-overflow-checks = false
-
+## # cargo build/run
+## [profile.dev]
+## codegen-units = 1
+## debug = 2
+## debug-assertions = true
+## incremental = false
+## opt-level = 0
+## overflow-checks = true
+## 
+## # cargo build/run --release
+## [profile.release]
+## codegen-units = 1
+## debug = 2
+## debug-assertions = false
+## incremental = false
+## lto = 'fat'
+## opt-level = 3
+## overflow-checks = false
+## 
