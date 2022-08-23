@@ -48,11 +48,11 @@ use embedded_hal::digital::v2::OutputPin;
 use embedded_hal::digital::v2::InputPin;
 
 use cyw43;
-use embassy::executor::raw::TaskPool;
-use embassy::executor::Executor;
-use embassy::executor::Spawner;
+use embassy_executor::raw::TaskPool;
+use embassy_executor::Executor;
+use embassy_executor::Spawner;
 use core::future::Future;
-use embassy::time::{Duration, Timer};
+use embassy_time::{Duration, Timer};
 
 /// Entry point to our bare-metal application.
 ///

@@ -30,5 +30,7 @@ rp2040-hal = { path ="./rp2040-hal" }
 [patch.crates-io]
 rp2040-hal = { path ="./rp2040-hal" }
 #embassy = { git = "https://github.com/embassy-rs/embassy", rev = "5f43c1d37e9db847c7861fe0bd821db62edba9f6" }
-embassy = { path = "/home/jan/embedded/embassy/embassy" }
+embassy-time = { path = "/home/jan/embedded/embassy/embassy-time" }
+embassy-sync = { path = "/home/jan/embedded/embassy/embassy-sync" }
+embassy-futures = { path = "/home/jan/embedded/embassy/embassy-futures" }
 

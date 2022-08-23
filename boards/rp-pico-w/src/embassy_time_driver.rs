@@ -6,9 +6,9 @@ use core::ops::DerefMut;
 
 use atomic_polyfill::{AtomicU8, Ordering};
 use critical_section::CriticalSection;
-use embassy::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy::blocking_mutex::Mutex;
-use embassy::time::driver::{AlarmHandle, Driver};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::blocking_mutex::Mutex;
+use embassy_time::driver::{AlarmHandle, Driver};
 
 use rp2040_hal::pac::interrupt;
 use rp2040_hal::pac;
@@ -37,7 +37,7 @@ struct TimerDriver {
     next_alarm: AtomicU8,
 }
 
-embassy::time_driver_impl!(static DRIVER: TimerDriver = TimerDriver{
+embassy_time::time_driver_impl!(static DRIVER: TimerDriver = TimerDriver{
     timer: Mutex::const_new(CriticalSectionRawMutex::new(), RefCell::new(None)),
     alarm:  Mutex::const_new(CriticalSectionRawMutex::new(), RefCell::new(None)),
     alarms:  Mutex::const_new(CriticalSectionRawMutex::new(), [DUMMY_ALARM; ALARM_COUNT]),
