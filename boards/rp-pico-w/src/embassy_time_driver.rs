@@ -80,7 +80,7 @@ impl Driver for TimerDriver {
         critical_section::with(|cs| {
             let alarms = self.alarms.borrow(cs);
             let alarm = &alarms[n];
-            let timer = self.timer.borrow(cs).borrow_mut().as_mut();
+            //let timer = self.timer.borrow(cs).borrow_mut().as_mut();
             alarm.timestamp.set(timestamp);
 
             let min_timestamp = self.next_scheduled_alarm().1;
@@ -92,8 +92,8 @@ impl Driver for TimerDriver {
             let now = self.now();
 
             if min_timestamp >= now {
-                use embedded_time::{duration::*, rate::*};
-                self.alarm.borrow(cs).borrow_mut().deref_mut().as_mut().unwrap().schedule(((min_timestamp - now) as u32).microseconds());
+                use embedded_time::{duration::*};
+                self.alarm.borrow(cs).borrow_mut().deref_mut().as_mut().unwrap().schedule(((min_timestamp - now) as u32).microseconds()).unwrap();
                 info!("alarm armed for {}", min_timestamp - now);
             }
             let now = self.now();
@@ -109,26 +109,28 @@ impl Driver for TimerDriver {
 }
 
 impl TimerDriver {
+    /*
     fn arm(&self) {
         info!("arm!");
         critical_section::with(|cs| {
-            let alarms = self.alarms.borrow(cs);
+            //let alarms = self.alarms.borrow(cs);
             let next = self.next_scheduled_alarm();
             let min_timestamp = next.1;
             if min_timestamp != u64::MAX {
-                let timer = self.timer.borrow(cs).borrow_mut().as_mut();
+                //let timer = self.timer.borrow(cs).borrow_mut().as_mut();
                 let now = self.now();
                 if min_timestamp <= now {
                     self.trigger_alarm(next.0, cs)
                 } else {
-                    use embedded_time::{duration::*, rate::*};
-                    self.alarm.borrow(cs).borrow_mut().deref_mut().as_mut().unwrap().schedule(((min_timestamp - now) as u32).microseconds());
+                    use embedded_time::{duration::*};
+                    self.alarm.borrow(cs).borrow_mut().deref_mut().as_mut().unwrap().schedule(((min_timestamp - now) as u32).microseconds()).unwrap();
                 }
             } else {
                 // ignore... for now unsafe { pac::TIMER.armed().write(|w| w.set_armed(1 << n)) }
             }
         });
     }
+    */
 
     fn check_alarm(&self) {
         info!("checking alarm");
@@ -142,7 +144,7 @@ impl TimerDriver {
         let n = next.0;
         critical_section::with(|cs| {
             let alarm = &self.alarms.borrow(cs)[n];
-            let timer = self.timer.borrow(cs).borrow_mut().as_mut();
+            //let timer = self.timer.borrow(cs).borrow_mut().as_mut();
             let timestamp = alarm.timestamp.get();
             let now = self.now();
             if timestamp <= now {
@@ -150,8 +152,8 @@ impl TimerDriver {
             } else {
                 // Not elapsed, arm it again.
                 // This can happen if it was set more than 2^32 us in the future.
-                use embedded_time::{duration::*, rate::*};
-                self.alarm.borrow(cs).borrow_mut().deref_mut().as_mut().unwrap().schedule(((timestamp - now) as u32).microseconds());
+                use embedded_time::{duration::*};
+                self.alarm.borrow(cs).borrow_mut().deref_mut().as_mut().unwrap().schedule(((timestamp - now) as u32).microseconds()).unwrap();
             }
             self.alarm.borrow(cs).borrow_mut().deref_mut().as_mut().unwrap().clear_interrupt();
         });
@@ -180,7 +182,8 @@ impl TimerDriver {
     }
 }
 
-/// safety: must be called exactly once at bootup
+/// # Safety
+/// must be called exactly once at bootup
 pub unsafe fn init(mut timer: Timer) {
     // init alarms
     critical_section::with(|cs| {
@@ -188,9 +191,9 @@ pub unsafe fn init(mut timer: Timer) {
         // and leak it, so it can be used safely
         let mut alarm = timer.alarm_0().unwrap();
         alarm.enable_interrupt();
-        unsafe {
+        //unsafe {
             pac::NVIC::unmask(pac::Interrupt::TIMER_IRQ_0);
-        }
+        //}
         info!("interrupt enabled!");
         DRIVER.alarm.borrow(cs).replace(Some(alarm));
         DRIVER.timer.borrow(cs).replace(Some(timer));

@@ -51,7 +51,7 @@ impl SpiDevice for pac::SPI0 {}
 impl SpiDevice for pac::SPI1 {}
 
 #[cfg(feature = "eh1_0_alpha")]
-impl eh1::ErrorType for SpiDevice {
+impl eh1::ErrorType for dyn SpiDevice {
     type Error = SpiInfallible;
 }
 

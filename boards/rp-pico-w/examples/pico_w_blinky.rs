@@ -38,7 +38,7 @@ use rp_pico_w::hal;
 
 use embedded_hal_1 as eh_1;
 
-use hal::gpio::PushPullOutput;
+//use hal::gpio::PushPullOutput;
 
 use eh_1::spi::ErrorType;
 use eh_1::spi::blocking::SpiBusFlush;
@@ -51,7 +51,6 @@ use cyw43;
 use embassy_executor::raw::TaskPool;
 use embassy_executor::Executor;
 use embassy_executor::Spawner;
-use core::future::Future;
 use embassy_time::{Duration, Timer};
 
 /// Entry point to our bare-metal application.
@@ -104,7 +103,7 @@ fn main() -> ! {
 
     // The delay object lets us wait for specified amounts of time (in
     // milliseconds)
-    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
+    let delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
 
     let mut executor = Executor::new();
 
@@ -114,7 +113,6 @@ fn main() -> ! {
     let mut task_pool: TaskPool<_, 10> = TaskPool::new();
     let task_pool = unsafe { forever(&mut task_pool) };
 
-    let state = cyw43::State::new();
     let state = unsafe { forever(&cyw43::State::new()) };
 
     info!("run spawner");
@@ -122,7 +120,7 @@ fn main() -> ! {
         info!("create spawn token");
         let spawn_token = task_pool.spawn(|| run(spawner, pins, delay, state));
         info!("spawn it!");
-        spawner.spawn(spawn_token);
+        spawner.spawn(spawn_token).unwrap();
     });
 
 }
@@ -135,21 +133,26 @@ unsafe fn forever<T>(r: &'_ T) -> &'static T {
     core::mem::transmute(r)
 }
 
-use embedded_hal_1::spi::blocking::{SpiBusRead, SpiBusWrite, SpiBus, SpiDevice};
+use embedded_hal_1::spi::blocking::{SpiBusRead, SpiBusWrite};
 
-async fn run(spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::delay::Delay, state: &cyw43::State) 
+async fn run(_spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::delay::Delay, state: &cyw43::State) 
 {
     // These are implicitly used by the spi driver if they are in the correct mode
     let mut spi_cs: hal::gpio::dynpin::DynPin = pins.wl_cs.into();
-    spi_cs.set_high();
+    // TODO should be high from the beginning :-(
+    spi_cs.into_readable_output();
+    spi_cs.set_high().unwrap();
     spi_cs.into_push_pull_output();
+    spi_cs.set_high().unwrap();
 
     let mut spi_clk = pins.voltage_monitor_wl_clk.into_push_pull_output();
-    spi_clk.set_low();
+    spi_clk.set_low().unwrap();
 
     let mut spi_mosi_miso: hal::gpio::dynpin::DynPin = pins.wl_d.into();
-    spi_mosi_miso.set_low();
+    spi_mosi_miso.into_readable_output();
+    spi_mosi_miso.set_low().unwrap();
     spi_mosi_miso.into_push_pull_output();
+    spi_mosi_miso.set_low().unwrap();
 
     let bus = MySpi { clk: spi_clk, dio: spi_mosi_miso };
     let spi = eh_1::spi::blocking::ExclusiveDevice::new(bus, spi_cs);
@@ -160,19 +163,18 @@ async fn run(spawner: Spawner, pins:  rp_pico_w::Pins, mut delay: cortex_m::dela
     let mut led_pin = pins.gpio0.into_push_pull_output();
     //let mut other_pin = pins.gpio1.into_push_pull_output();
 
-    let mut pwr = pins.wl_on.into_push_pull_output();
+    let pwr = pins.wl_on.into_push_pull_output();
 
     let fw = include_bytes!("firmware/43439A0.bin");
-    
+
     info!("create cyw43 driver");
-    let (mut control, runner) = cyw43::new(state, pwr, spi, fw).await;
+    let (_control, _runner) = cyw43::new(state, pwr, spi, fw).await;
     info!("created cyw43 driver");
 
     // Blink the LED at 1 Hz
     loop {
         info!("on");
         led_pin.set_high().unwrap();
-        use embedded_hal::digital::v2::OutputPin;
         Timer::after(Duration::from_millis(500)).await;
         //delay.delay_ms(500);
         info!("off");
@@ -216,16 +218,18 @@ impl SpiBusRead<u32> for MySpi {
             for _ in 0..32 {
                 w = w << 1;
 
-                cortex_m::asm::nop(); 
+                cortex_m::asm::nop();
+                cortex_m::asm::nop();
                 // rising edge, sample data
                 if self.dio.is_high().unwrap() {
                     w |= 0x01;
                 }
-                self.clk.set_high();
+                self.clk.set_high().unwrap();
 
-                cortex_m::asm::nop(); 
+                cortex_m::asm::nop();
+                cortex_m::asm::nop();
                 // falling edge
-                self.clk.set_low();
+                self.clk.set_low().unwrap();
             }
             *word = w
         }
@@ -243,23 +247,24 @@ impl SpiBusWrite<u32> for MySpi {
             let mut word = *word;
             for _ in 0..32 {
                 // falling edge, setup data
-                cortex_m::asm::nop(); 
-                self.clk.set_low();
+                cortex_m::asm::nop();
+                cortex_m::asm::nop();
+                self.clk.set_low().unwrap();
                 if word & 0x8000_0000 == 0 {
-                    self.dio.set_low();
+                    self.dio.set_low().unwrap();
                 } else {
-                    self.dio.set_high();
+                    self.dio.set_high().unwrap();
                 }
 
-                cortex_m::asm::nop(); 
+                cortex_m::asm::nop();
+                cortex_m::asm::nop();
                 // rising edge
-                self.clk.set_high();
+                self.clk.set_high().unwrap();
 
                 word = word << 1;
             }
         }
-        cortex_m::asm::nop(); 
-        self.clk.set_low();
+        self.clk.set_low().unwrap();
 
         self.dio.into_floating_input();
         Ok(())
