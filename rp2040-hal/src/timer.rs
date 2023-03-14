@@ -102,6 +102,19 @@ impl Timer {
 // safety: all write operations are synchronised and all reads are atomic
 unsafe impl Sync for Timer {}
 
+#[cfg(feature = "eh1_0_alpha")]
+impl eh1_0_alpha::delay::DelayUs for &Timer {
+    fn delay_us(&mut self, us: u32) {
+        let end = self.get_counter().ticks().wrapping_add(us.into());
+        loop {
+            let ts = self.get_counter().ticks();
+            if ts >= end {
+                return;
+            }
+        }
+    }
+}
+
 /// Implementation of the embedded_hal::Timer traits using rp2040_hal::timer counter
 ///
 /// ## Usage
