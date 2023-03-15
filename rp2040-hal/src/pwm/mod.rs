@@ -723,3 +723,40 @@ impl<S: SliceId, M: SliceMode + ValidSliceInputMode<S>> Slice<S, M> {
         pin.into_mode()
     }
 }
+
+#[cfg(feature = "eh1_0_alpha")]
+impl<S: SliceId, M: SliceMode, C: ChannelId> eh1_0_alpha::pwm::ErrorType for Channel<S, M, C> {
+    type Error = core::convert::Infallible;
+}
+
+#[cfg(feature = "eh1_0_alpha")]
+impl<S: SliceId, M: SliceMode> eh1_0_alpha::pwm::SetDutyCycle for Channel<S, M, A> {
+    #[inline]
+    fn get_max_duty_cycle(&self) -> u16 {
+        self.regs.read_top()
+    }
+
+    fn set_duty_cycle(&mut self, duty: u16) -> Result<(), Self::Error> {
+        self.duty_cycle = duty;
+        if self.enabled {
+            self.regs.write_cc_a(duty);
+        }
+        Ok(())
+    }
+}
+
+#[cfg(feature = "eh1_0_alpha")]
+impl<S: SliceId, M: SliceMode> eh1_0_alpha::pwm::SetDutyCycle for Channel<S, M, B> {
+    #[inline]
+    fn get_max_duty_cycle(&self) -> u16 {
+        self.regs.read_top()
+    }
+
+    fn set_duty_cycle(&mut self, duty: u16) -> Result<(), Self::Error> {
+        self.duty_cycle = duty;
+        if self.enabled {
+            self.regs.write_cc_b(duty);
+        }
+        Ok(())
+    }
+}
