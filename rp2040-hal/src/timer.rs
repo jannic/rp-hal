@@ -97,14 +97,13 @@ impl Timer {
     pub fn alarm_3(&mut self) -> Option<Alarm3> {
         take_alarm(1 << 3).then_some(Alarm3(PhantomData))
     }
-}
 
-// safety: all write operations are synchronised and all reads are atomic
-unsafe impl Sync for Timer {}
-
-#[cfg(feature = "eh1_0_alpha")]
-impl eh1_0_alpha::delay::DelayUs for Timer {
-    fn delay_us(&mut self, us: u32) {
+    /// Pauses execution for at minimum `us` microseconds.
+    ///
+    /// This implementation assumes that the timer doesn't overflow, and that the counter
+    /// doesn't get modified manually. Both assumptions should hold unless some unsafe code
+    /// modifies the timer registers directly.
+    pub fn delay_us(&self, us: u32) {
         let end = self.get_counter().ticks().wrapping_add(us.into());
         loop {
             let ts = self.get_counter().ticks();
@@ -115,16 +114,20 @@ impl eh1_0_alpha::delay::DelayUs for Timer {
     }
 }
 
+// safety: all write operations are synchronised and all reads are atomic
+unsafe impl Sync for Timer {}
+
+#[cfg(feature = "eh1_0_alpha")]
+impl eh1_0_alpha::delay::DelayUs for Timer {
+    fn delay_us(&mut self, us: u32) {
+        (*self).delay_us(us);
+    }
+}
+
 #[cfg(feature = "eh1_0_alpha")]
 impl eh1_0_alpha::delay::DelayUs for &Timer {
     fn delay_us(&mut self, us: u32) {
-        let end = self.get_counter().ticks().wrapping_add(us.into());
-        loop {
-            let ts = self.get_counter().ticks();
-            if ts >= end {
-                return;
-            }
-        }
+        (*self).delay_us(us);
     }
 }
 
