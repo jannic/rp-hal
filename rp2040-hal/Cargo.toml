@@ -24,7 +24,7 @@ embedded-dma = "0.2.0"
 fugit = "0.3.6"
 itertools = { version = "0.10.1", default-features = false }
 nb = "1.0"
-rp2040-pac = "0.4.0"
+rp2040-pac = { version = "0.4.0", features = [ "critical-section" ], git = "https://github.com/jannic-dev-forks/rp2040-pac", rev = "25503d1aa135a08368866d0f646544090bdc2bc3" }
 paste = "1.0"
 pio = "0.2.0"
 rp2040-hal-macros = { version = "0.1.0", path = "../rp2040-hal-macros" }
@@ -102,3 +102,7 @@ required-features = ["rt", "critical-section-impl"]
 # adc_fifo_dma example uses cortex-m-rt::interrupt, need rt feature for that
 name = "adc_fifo_dma"
 required-features = ["rt", "critical-section-impl"]
+
+[[example]]
+name = "blinky"
+required-features = ["critical-section-impl"]
