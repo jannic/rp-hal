@@ -24,7 +24,7 @@ embedded-dma = "0.2.0"
 fugit = "0.3.6"
 itertools = { version = "0.10.1", default-features = false }
 nb = "1.0"
-rp2040-pac = { version = "0.4.0", features = [ "critical-section" ], git = "https://github.com/jannic-dev-forks/rp2040-pac", rev = "25503d1aa135a08368866d0f646544090bdc2bc3" }
+rp2040-pac = { version = "0.4.0", git = "https://github.com/rp-rs/rp2040-pac", rev = "6aed75d1903bbd8e549d8ffa142c6703b272613e" }
 paste = "1.0"
 pio = "0.2.0"
 rp2040-hal-macros = { version = "0.1.0", path = "../rp2040-hal-macros" }
