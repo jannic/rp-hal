@@ -24,7 +24,7 @@ embedded-dma = "0.2.0"
 fugit = "0.3.6"
 itertools = { version = "0.10.1", default-features = false }
 nb = "1.0"
-rp2040-pac = { version = "0.4.0", git = "https://github.com/rp-rs/rp2040-pac", rev = "6aed75d1903bbd8e549d8ffa142c6703b272613e" }
+rp2040-pac = { version = "0.4.0", git = "https://github.com/rp-rs/rp2040-pac", rev = "05114f0c5e526a867d5f6d6ff23482c377bb492e", features = ["critical-section"] }
 paste = "1.0"
 pio = "0.2.0"
 rp2040-hal-macros = { version = "0.1.0", path = "../rp2040-hal-macros" }
@@ -73,7 +73,7 @@ rom-v2-intrinsics = []
 rp2040-e5 = []
 
 # critical section that is safe for multicore use
-critical-section-impl = ["critical-section/restore-state-u8", "rp2040-pac/critical-section"]
+critical-section-impl = ["critical-section/restore-state-u8"]
 
 # Support alpha release of embedded-hal
 eh1_0_alpha = [ "dep:eh1_0_alpha", "dep:eh_nb_1_0_alpha" ]
