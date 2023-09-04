@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix USB PLL's VCO frequency according to updated datasheet - #688 @ithinuel, @jannic
 - Fix UART transmit\_flushed method - #713 @jannic
 - Fix calculation of pll frequency for refdiv != 1 - #691 @vinsynth
+- Fixed minimum PLL's VCO frequency according to updated datasheet - #684 @ithinuel
 
 ### Changed
 
