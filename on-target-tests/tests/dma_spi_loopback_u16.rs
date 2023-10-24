@@ -98,7 +98,7 @@ mod tests {
         let spi_sclk = pins.gpio6.reconfigure();
         let spi_mosi = pins.gpio7.reconfigure();
         let spi_miso = pins.gpio4.reconfigure();
-        let spi = hal::spi::Spi::new(pac.SPI0, (spi_mosi, spi_miso, spi_sclk));
+        let spi = hal::spi::Spi::new_with_data_size(pac.SPI0, (spi_mosi, spi_miso, spi_sclk));
 
         // Exchange the uninitialised SPI driver for an initialised one
         let spi = spi.init(
