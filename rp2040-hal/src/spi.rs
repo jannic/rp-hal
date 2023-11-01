@@ -277,7 +277,7 @@ impl<D: SpiDevice, P: ValidSpiPinout<D>, const DS: u8> Spi<Disabled, D, P, DS> {
     ///
     /// Initialize it with [`.init`][Self::init]
     /// or [`.init_slave`][Self::init_slave].
-    pub fn new_with_data_size<const DATA_SIZE: u8>(device: D, pins: P) -> Spi<Disabled, D, P, DATA_SIZE> {
+    pub fn new_with_data_size(device: D, pins: P) -> Spi<Disabled, D, P, DS> {
         Spi {
             device,
             pins,
