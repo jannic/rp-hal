@@ -1397,11 +1397,11 @@ impl<T: AnyPin> embedded_hal_0_2::digital::v2::OutputPin for InOutPin<T> {
 }
 
 mod eh1 {
-    use embedded_hal::digital::{ErrorType, InputPin, OutputPin, StatefulOutputPin};
+    use embedded_hal::digital::{ErrorKind, ErrorType, InputPin, OutputPin, StatefulOutputPin};
 
     use super::{
-        func, AnyPin, AsInputPin, Error, FunctionSio, InOutPin, Pin, PinId, PullType, SioConfig,
-        SioInput, SioOutput,
+        func, AnyPin, AsInputPin, DynFunction, Error, FunctionSio, InOutPin, Pin, PinId, PullType,
+        SioConfig, SioInput, SioOutput,
     };
 
     impl<I, P, S> ErrorType for Pin<I, FunctionSio<S>, P>
@@ -1424,6 +1424,48 @@ mod eh1 {
         }
 
         fn set_high(&mut self) -> Result<(), Self::Error> {
+            self._set_high();
+            Ok(())
+        }
+    }
+
+    #[non_exhaustive]
+    #[derive(Debug)]
+    pub enum DynFunctionError {
+        InvalidFunction,
+    }
+
+    impl embedded_hal::digital::Error for DynFunctionError {
+        fn kind(&self) -> ErrorKind {
+            ErrorKind::Other
+        }
+    }
+
+    impl<I, P> ErrorType for Pin<I, DynFunction, P>
+    where
+        I: PinId,
+        P: PullType,
+    {
+        type Error = DynFunctionError;
+    }
+
+    impl<I, P> OutputPin for Pin<I, DynFunction, P>
+    where
+        I: PinId,
+        P: PullType,
+    {
+        fn set_low(&mut self) -> Result<(), Self::Error> {
+            if self.function() != DynFunction::Sio(super::DynSioConfig::Output) {
+                return Err(DynFunctionError::InvalidFunction);
+            }
+            self._set_low();
+            Ok(())
+        }
+
+        fn set_high(&mut self) -> Result<(), Self::Error> {
+            if self.function() != DynFunction::Sio(super::DynSioConfig::Output) {
+                return Err(DynFunctionError::InvalidFunction);
+            }
             self._set_high();
             Ok(())
         }
