@@ -29,7 +29,7 @@ use hal::pac;
 
 // Some traits we need
 use embedded_hal::delay::DelayNs;
-use embedded_hal::digital::OutputPin;
+use embedded_hal::digital::{InputPin, OutputPin};
 
 /// The linker will place this boot block at the start of our program image. We
 /// need this to help the ROM bootloader get our code up and running.
@@ -106,11 +106,23 @@ fn main() -> ! {
     // Light one LED at a time. Start at GPIO2 and go through to GPIO5, then reverse.
     loop {
         for led in pinarray.iter_mut() {
+            led.try_set_function(DynFunction::Sio(hal::gpio::DynSioConfig::Input))
+                .unwrap();
+            // Not actually doing anything with the input value here, as this is just
+            // a silly example.
+            let _ = led.is_high().unwrap();
+            led.try_set_function(DynFunction::Sio(hal::gpio::DynSioConfig::Output))
+                .unwrap();
             led.set_high().unwrap();
             timer.delay_ms(50);
             led.set_low().unwrap();
         }
         for led in pinarray.iter_mut().rev() {
+            led.try_set_function(DynFunction::Sio(hal::gpio::DynSioConfig::Input))
+                .unwrap();
+            let _ = led.is_high().unwrap();
+            led.try_set_function(DynFunction::Sio(hal::gpio::DynSioConfig::Output))
+                .unwrap();
             led.set_high().unwrap();
             timer.delay_ms(50);
             led.set_low().unwrap();
