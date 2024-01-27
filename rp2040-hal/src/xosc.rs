@@ -102,7 +102,7 @@ impl CrystalOscillator<Disabled> {
             return Err(Error::FrequencyOutOfRange);
         }
 
-        self.device.ctrl.write(|w| {
+        self.device.ctrl().write(|w| {
             w.freq_range()._1_15mhz();
             w
         });
@@ -116,12 +116,12 @@ impl CrystalOscillator<Disabled> {
         //Then we check if it fits into an u16.
         let startup_delay: u16 = startup_delay.try_into().map_err(|_| Error::BadArgument)?;
 
-        self.device.startup.write(|w| unsafe {
+        self.device.startup().write(|w| unsafe {
             w.delay().bits(startup_delay);
             w
         });
 
-        self.device.ctrl.write(|w| {
+        self.device.ctrl().write(|w| {
             w.enable().enable();
             w
         });
@@ -138,7 +138,7 @@ pub struct StableOscillatorToken {
 impl CrystalOscillator<Initialized> {
     /// One has to wait for the startup delay before using the oscillator, ie awaiting stablilzation of the XOSC
     pub fn await_stabilization(&self) -> nb::Result<StableOscillatorToken, Infallible> {
-        if self.device.status.read().stable().bit_is_clear() {
+        if self.device.status().read().stable().bit_is_clear() {
             return Err(WouldBlock);
         }
 
@@ -160,7 +160,7 @@ impl CrystalOscillator<Stable> {
 
     /// Disables the XOSC
     pub fn disable(self) -> CrystalOscillator<Disabled> {
-        self.device.ctrl.modify(|_r, w| {
+        self.device.ctrl().modify(|_r, w| {
             w.enable().disable();
             w
         });
@@ -179,7 +179,7 @@ impl CrystalOscillator<Stable> {
         //taken from the C SDK
         const XOSC_DORMANT_VALUE: u32 = 0x636f6d61;
 
-        self.device.dormant.write(|w| {
+        self.device.dormant().write(|w| {
             w.bits(XOSC_DORMANT_VALUE);
             w
         });
