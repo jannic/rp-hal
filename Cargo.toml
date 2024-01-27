@@ -13,3 +13,5 @@ rp2040-hal = { path = "./rp2040-hal" }
 
 [patch.crates-io]
 rp2040-hal = { path = "./rp2040-hal" }
+rp2040-pac = { git = "https://github.com/jannic-dev-forks/rp2040-pac/", rev = "00b87d4568741540ba0be623bba34ce4e8701baf" }
+
