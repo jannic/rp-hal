@@ -5,52 +5,38 @@
 use embedded_hal::digital::PinState;
 use frunk::{hlist::Plucker, HCons, HNil};
 
-use crate::typelevel::Sealed;
-
-use super::{
-    pin::pin_sealed::TypeLevelPinId, AnyPin, FunctionSio, FunctionSioInput, FunctionSioOutput, Pin,
-    PinId, PullType, SioConfig,
+use crate::{
+    gpio::{pin::pin_sealed::PinIdOps, DynPinId},
+    typelevel::Sealed,
 };
 
+use super::{pin::pin_sealed::TypeLevelPinId, AnyPin, FunctionSio, SioConfig};
+
 /// Generate a read mask for a pin list.
-pub trait ReadPinHList: Sealed {
+pub trait PinMask: Sealed {
     /// Generate a mask for a pin list.
-    fn read_mask(&self) -> u32;
-}
-impl ReadPinHList for HNil {
-    fn read_mask(&self) -> u32 {
-        0
-    }
-}
-impl<H: AnyPin, T: ReadPinHList> ReadPinHList for HCons<H, T> {
-    fn read_mask(&self) -> u32 {
-        (1 << self.head.borrow().id().num) | self.tail.read_mask()
-    }
+    fn pin_mask(&self) -> u32;
+    /// DynPinId of one if the pins. Can be used
+    /// to determine the correct GPIO bank's registers.
+    fn id(&self) -> Option<DynPinId>;
 }
 
-/// Generate a write mask for a pin list.
-pub trait WritePinHList: Sealed {
-    /// Generate a mask for a pin list.
-    fn write_mask(&self) -> u32;
-}
-impl WritePinHList for HNil {
-    fn write_mask(&self) -> u32 {
+impl PinMask for HNil {
+    fn pin_mask(&self) -> u32 {
         0
     }
-}
-impl<P: PinId, M: PullType, T: WritePinHList> WritePinHList
-    for HCons<Pin<P, FunctionSioInput, M>, T>
-{
-    fn write_mask(&self) -> u32 {
-        // This is an input pin, so don't include it in write_mask
-        self.tail.write_mask()
+
+    fn id(&self) -> Option<DynPinId> {
+        None
     }
 }
-impl<P: PinId, M: PullType, T: WritePinHList> WritePinHList
-    for HCons<Pin<P, FunctionSioOutput, M>, T>
-{
-    fn write_mask(&self) -> u32 {
-        (1 << self.head.id().num) | self.tail.write_mask()
+impl<H: AnyPin, T: PinMask> PinMask for HCons<H, T> {
+    fn pin_mask(&self) -> u32 {
+        (1 << self.head.borrow().id().num) | self.tail.pin_mask()
+    }
+
+    fn id(&self) -> Option<DynPinId> {
+        Some(self.head.borrow().id())
     }
 }
 
@@ -72,7 +58,9 @@ impl<P: PinId, M: PullType, T: WritePinHList> WritePinHList
 /// group.toggle();
 /// defmt!("Group's state is: {}", group.read());
 /// ```
-pub struct PinGroup<T = HNil>(T);
+pub struct PinGroup<T = HNil>(T)
+where
+    T: PinMask;
 impl PinGroup<HNil> {
     /// Creates an empty pin group.
     pub fn new() -> Self {
@@ -96,6 +84,7 @@ impl<T, H> PinGroup<HCons<H, T>>
 where
     H::Id: TypeLevelPinId,
     H: AnyPin,
+    T: PinMask,
 {
     /// Add a pin to the group.
     pub fn add_pin<C, P>(self, pin: P) -> PinGroup<HCons<P, HCons<H, T>>>
@@ -117,15 +106,15 @@ where
     ) -> (P, PinGroup<<HCons<H, T> as Plucker<P, Index>>::Remainder>)
     where
         HCons<H, T>: Plucker<P, Index>,
+        <HCons<H, T> as Plucker<P, Index>>::Remainder: PinMask,
     {
         let (p, rest): (P, _) = self.0.pluck();
         (p, PinGroup(rest))
     }
 }
-impl<H, T> PinGroup<HCons<H, T>>
+impl<T> PinGroup<T>
 where
-    HCons<H, T>: ReadPinHList + WritePinHList,
-    H: AnyPin,
+    T: PinMask,
 {
     /// Read the whole group at once.
     ///
@@ -140,8 +129,12 @@ where
     ///                          This is Gpio1    |
     /// ```
     pub fn read(&self) -> u32 {
-        let mask = self.0.read_mask();
-        crate::sio::Sio::read_bank0() & mask
+        let mask = self.0.pin_mask();
+        if let Some(head_id) = self.0.id() {
+            head_id.sio_in().read().bits() & mask
+        } else {
+            0
+        }
     }
 
     /// Write this set of pins all at the same time.
@@ -150,12 +143,13 @@ where
     /// set are ignored.
     pub fn set(&mut self, state: PinState) {
         use super::pin::pin_sealed::PinIdOps;
-        let mask = self.0.write_mask();
-        let head_id = self.0.head.borrow().id();
-        if state == PinState::Low {
-            head_id.sio_out_clr().write(|w| unsafe { w.bits(mask) });
-        } else {
-            head_id.sio_out_set().write(|w| unsafe { w.bits(mask) });
+        let mask = self.0.pin_mask();
+        if let Some(head_id) = self.0.id() {
+            if state == PinState::Low {
+                head_id.sio_out_clr().write(|w| unsafe { w.bits(mask) });
+            } else {
+                head_id.sio_out_set().write(|w| unsafe { w.bits(mask) });
+            }
         }
     }
 
@@ -174,17 +168,18 @@ where
     /// State corresponding to bins not in this group are ignored.
     pub fn set_u32(&mut self, state: u32) {
         use super::pin::pin_sealed::PinIdOps;
-        let mask = self.0.write_mask();
+        let mask = self.0.pin_mask();
         let state_masked = mask & state;
-        let head_id = self.0.head.borrow().id();
-        // UNSAFE: this register is 32bit wide and all bits are valid.
-        // The value set is masked
-        head_id.sio_out().modify(|r, w| unsafe {
-            // clear all bit part of this group
-            let cleared = r.bits() & !mask;
-            // set bits according to state
-            w.bits(cleared | state_masked)
-        });
+        if let Some(head_id) = self.0.id() {
+            // UNSAFE: this register is 32bit wide and all bits are valid.
+            // The value set is masked
+            head_id.sio_out().modify(|r, w| unsafe {
+                // clear all bit part of this group
+                let cleared = r.bits() & !mask;
+                // set bits according to state
+                w.bits(cleared | state_masked)
+            });
+        }
     }
 
     /// Toggles this set of pins all at the same time.
@@ -193,13 +188,10 @@ where
     /// set are ignored.
     pub fn toggle(&mut self) {
         use super::pin::pin_sealed::PinIdOps;
-        let mask = self.0.write_mask();
-        self.0
-            .head
-            .borrow()
-            .id()
-            .sio_out_xor()
-            .write(|w| unsafe { w.bits(mask) });
+        let mask = self.0.pin_mask();
+        if let Some(head_id) = self.0.id() {
+            head_id.sio_out_xor().write(|w| unsafe { w.bits(mask) });
+        }
     }
 }
 impl Default for PinGroup<HNil> {

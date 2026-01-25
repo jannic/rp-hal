@@ -37,7 +37,7 @@ mod tests {
     use crate::hal::clocks::init_clocks_and_plls;
     use crate::hal::pac;
     use crate::XTAL_FREQ_HZ;
-    use hal::gpio::{PinGroup, PinState};
+    use hal::gpio::PinGroup;
     use hal::watchdog::Watchdog;
 
     #[init]
@@ -128,39 +128,12 @@ mod tests {
         );
 
         // GPIO (0 <=> 2) and (1 <=> 3) connected together
-        let mut group = PinGroup::new()
+        let group = PinGroup::new()
             .add_pin(pins.gpio0.into_push_pull_output())
             .add_pin(pins.gpio1.into_push_pull_output())
             .add_pin(pins.gpio2.into_bus_keep_input())
             .add_pin(pins.gpio3.into_bus_keep_input());
-
-        group.set(PinState::Low);
-        cortex_m::asm::delay(10);
-        assert_eq!(group.read(), 0b0000);
-        group.set(PinState::High);
-        cortex_m::asm::delay(10);
-        assert_eq!(group.read(), 0b1111);
-        group.set(PinState::Low);
-        cortex_m::asm::delay(10);
-        assert_eq!(group.read(), 0b0000);
-
-        group.set(PinState::Low);
-        group.toggle();
-        cortex_m::asm::delay(10);
-        assert_eq!(group.read(), 0b1111);
-        group.toggle();
-        cortex_m::asm::delay(10);
-        assert_eq!(group.read(), 0b0000);
-        group.toggle();
-        cortex_m::asm::delay(10);
-        assert_eq!(group.read(), 0b1111);
-
-        group.set_u32(0b0001);
-        cortex_m::asm::delay(10);
-        assert_eq!(group.read(), 0b0101);
-        group.set_u32(0b0010);
-        cortex_m::asm::delay(10);
-        assert_eq!(group.read(), 0b1010);
+        super::toggle_pins(group);
     }
 
     #[test]
@@ -171,4 +144,35 @@ mod tests {
         let mut temp_sensor = hal::adc::Adc::take_temp_sensor(&mut adc).unwrap();
         let _temperature: u16 = adc.read(&mut temp_sensor).unwrap();
     }
+}
+
+use hal::gpio::{PinGroup, PinMask, PinState};
+fn toggle_pins<T: PinMask>(mut group: PinGroup<T>) {
+    group.set(PinState::Low);
+    cortex_m::asm::delay(10);
+    assert_eq!(group.read(), 0b0000);
+    group.set(PinState::High);
+    cortex_m::asm::delay(10);
+    assert_eq!(group.read(), 0b1111);
+    group.set(PinState::Low);
+    cortex_m::asm::delay(10);
+    assert_eq!(group.read(), 0b0000);
+
+    group.set(PinState::Low);
+    group.toggle();
+    cortex_m::asm::delay(10);
+    assert_eq!(group.read(), 0b1111);
+    group.toggle();
+    cortex_m::asm::delay(10);
+    assert_eq!(group.read(), 0b0000);
+    group.toggle();
+    cortex_m::asm::delay(10);
+    assert_eq!(group.read(), 0b1111);
+
+    group.set_u32(0b0001);
+    cortex_m::asm::delay(10);
+    assert_eq!(group.read(), 0b0101);
+    group.set_u32(0b0010);
+    cortex_m::asm::delay(10);
+    assert_eq!(group.read(), 0b1010);
 }
